@@ -10,7 +10,7 @@ PROVIDER_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/cc-provider"
 CONFIG_FILE="$PROVIDER_DIR/providers.conf"
 _CLAUDE_SETTINGS="$HOME/.claude/settings.json"
 _CLAUDE_JSON="$HOME/.claude.json"
-_CLAUDE_VSCODE_CONFIG="$HOME/.claude/config.json"
+_VSCODE_SETTINGS="$HOME/Library/Application Support/Code/User/settings.json"
 
 # Colors
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
@@ -138,34 +138,120 @@ except Exception as e:
 }
 
 ############################################################
-# VS Code 插件登录跳过（~/.claude/config.json）
+# VS Code 插件配置同步（claudeCode.environmentVariables）
 ############################################################
 
-# 确保 ~/.claude/config.json 包含 primaryApiKey，跳过 VS Code 插件登录
-_ccp_ensure_vscode_config() {
-    # 目录不存在则创建
-    [[ ! -d "$HOME/.claude" ]] && mkdir -p "$HOME/.claude"
+# 将当前 shell 中的 ANTHROPIC_* 环境变量同步到 VS Code settings.json
+# 这样 VS Code Claude Code 插件也会使用同一个 provider
+_ccp_sync_vscode() {
+    local vscode_dir
+    vscode_dir="$(dirname "$_VSCODE_SETTINGS")"
+    [[ ! -d "$vscode_dir" ]] && { echo -e "${YELLOW}VS Code User directory not found — skipping sync${NC}" >&2; return 0; }
 
-    if [[ -f "$_CLAUDE_VSCODE_CONFIG" ]]; then
-        # 文件已存在，检查是否有 primaryApiKey
-        if grep -q '"primaryApiKey"' "$_CLAUDE_VSCODE_CONFIG" 2>/dev/null; then
-            return 0
-        fi
-        # 已有文件但缺少 primaryApiKey，追加
-        if command -v python3 &>/dev/null; then
-            python3 -c "
-import json
-with open('$_CLAUDE_VSCODE_CONFIG', 'r') as f:
-    d = json.load(f)
-d['primaryApiKey'] = 'ccp-bypass'
-with open('$_CLAUDE_VSCODE_CONFIG', 'w') as f:
-    json.dump(d, f, indent=2)
-" 2>/dev/null && return 0
-        fi
+    # 构建 python3 脚本：读取/创建 settings.json，注入 claudeCode 配置
+    # 传入当前 shell 中所有非空的 ANTHROPIC_* 环境变量
+    local env_json="[]"
+    if command -v python3 &>/dev/null; then
+        env_json=$(python3 -c "
+import json, os
+envvars = [
+    'ANTHROPIC_BASE_URL', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN',
+    'ANTHROPIC_MODEL', 'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+    'ANTHROPIC_DEFAULT_SONNET_MODEL', 'ANTHROPIC_DEFAULT_OPUS_MODEL',
+]
+result = []
+for v in envvars:
+    val = os.environ.get(v, '')
+    if val:
+        result.append({'name': v, 'value': val})
+print(json.dumps(result))
+" 2>/dev/null)
     fi
 
-    # 文件不存在或 python3 fallback 失败，直接创建
-    echo '{"primaryApiKey":"ccp-bypass"}' > "$_CLAUDE_VSCODE_CONFIG"
+    python3 -c "
+import json, sys, os
+
+path = os.path.expanduser('$_VSCODE_SETTINGS')
+env_json = '''$env_json'''
+
+try:
+    env_vars = json.loads(env_json)
+except:
+    env_vars = []
+
+# 读取现有 settings
+if os.path.exists(path):
+    with open(path, 'r') as f:
+        settings = json.load(f)
+else:
+    settings = {}
+
+# 设置 claudeCode 配置
+settings['claudeCode.disableLoginPrompt'] = True
+settings['claudeCode.hideOnboarding'] = True
+settings['claudeCode.environmentVariables'] = env_vars
+
+with open(path, 'w') as f:
+    json.dump(settings, f, indent=4, ensure_ascii=False)
+    f.write('\n')
+" 2>/dev/null
+
+    if [[ $? -ne 0 ]]; then
+        echo -e "${YELLOW}Warning: failed to sync VS Code settings${NC}" >&2
+        return 1
+    fi
+}
+
+# 清除 VS Code settings.json 中的 claudeCode.environmentVariables
+_ccp_clear_vscode_env() {
+    [[ ! -f "$_VSCODE_SETTINGS" ]] && return 0
+
+    python3 -c "
+import json, os
+
+path = os.path.expanduser('$_VSCODE_SETTINGS')
+with open(path, 'r') as f:
+    settings = json.load(f)
+
+if 'claudeCode' in settings and 'environmentVariables' in settings.get('claudeCode', {}):
+    # legacy flat format
+    pass
+if 'claudeCode.environmentVariables' in settings:
+    settings['claudeCode.environmentVariables'] = []
+    with open(path, 'w') as f:
+        json.dump(settings, f, indent=4, ensure_ascii=False)
+        f.write('\n')
+" 2>/dev/null
+}
+
+# 检测 VS Code settings.json 中的 environmentVariables 是否与当前 shell 一致
+_ccp_vscode_in_sync() {
+    [[ ! -f "$_VSCODE_SETTINGS" ]] && return 1
+
+    # 如果当前 shell 没有第三方 provider，VS Code 也应该为空
+    if [[ -z "${ANTHROPIC_BASE_URL:-}" ]]; then
+        python3 -c "
+import json, os
+with open(os.path.expanduser('$_VSCODE_SETTINGS'), 'r') as f:
+    s = json.load(f)
+envs = s.get('claudeCode.environmentVariables', [])
+sys.exit(0 if len(envs) == 0 else 1)
+import sys
+" 2>/dev/null
+        return $?
+    fi
+
+    # 当前有 provider，检查 VS Code 是否包含 ANTHROPIC_BASE_URL
+    python3 -c "
+import json, os, sys
+with open(os.path.expanduser('$_VSCODE_SETTINGS'), 'r') as f:
+    s = json.load(f)
+envs = s.get('claudeCode.environmentVariables', [])
+has_url = any(e.get('name') == 'ANTHROPIC_BASE_URL' for e in envs)
+has_disable = s.get('claudeCode.disableLoginPrompt', False)
+sys.exit(0 if (has_url and has_disable) else 1)
+" 2>/dev/null
+    return $?
 }
 
 ############################################################
@@ -218,11 +304,6 @@ _ccp_diagnose() {
     echo -e "${YELLOW}  Run ${BOLD}ccp doctor${NC} for details, or use ${BOLD}ccp reset${NC} to resolve.${NC}" >&2
 }
 
-# 检测 VS Code 插件 config.json 是否就绪
-_ccp_vscode_config_ok() {
-    [[ -f "$_CLAUDE_VSCODE_CONFIG" ]] && grep -q '"primaryApiKey"' "$_CLAUDE_VSCODE_CONFIG" 2>/dev/null
-}
-
 # 详细诊断命令
 _ccp_doctor() {
     echo -e "${BOLD}${CYAN}=== ccp Doctor ===${NC}" >&2
@@ -272,13 +353,14 @@ _ccp_doctor() {
     fi
 
     echo "" >&2
-    echo -e "${BOLD}5. VS Code plugin (${_CLAUDE_VSCODE_CONFIG})${NC}" >&2
-    if _ccp_vscode_config_ok; then
-        echo -e "   ${GREEN}OK — primaryApiKey set (VS Code login bypassed)${NC}" >&2
+    echo -e "${BOLD}5. VS Code plugin (${_VSCODE_SETTINGS})${NC}" >&2
+    if [[ ! -f "$_VSCODE_SETTINGS" ]]; then
+        echo -e "   ${YELLOW}VS Code settings.json not found — skipping${NC}" >&2
+    elif _ccp_vscode_in_sync; then
+        echo -e "   ${GREEN}OK — claudeCode.environmentVariables in sync${NC}" >&2
     else
-        echo -e "   ${RED}MISSING — ~/.claude/config.json missing primaryApiKey${NC}" >&2
-        echo -e "   VS Code Claude plugin may prompt for login." >&2
-        echo -e "   Fix: ${BOLD}ccp use <name>${NC} will auto-create it, or run ${BOLD}ccp fix-vscode${NC}" >&2
+        echo -e "   ${RED}OUT OF SYNC — VS Code claudeCode.environmentVariables does not match current provider${NC}" >&2
+        echo -e "   Fix: ${BOLD}ccp use <name>${NC} will auto-sync, or run ${BOLD}ccp sync-vscode${NC}" >&2
     fi
 }
 
@@ -336,8 +418,8 @@ _ccp_switch() {
     # 确保 onboarding 已完成，跳过 login 提示
     _ccp_ensure_onboarding
 
-    # 确保 VS Code 插件 config.json 存在，跳过 VS Code 登录
-    _ccp_ensure_vscode_config
+    # 同步环境变量到 VS Code settings.json
+    _ccp_sync_vscode
 
     echo -e "${GREEN}Switched to: ${BOLD}$name${NC} | $base_url | ${vals[5]:-default}" >&2
 }
@@ -348,6 +430,10 @@ _ccp_reset() {
         [[ -n "$envvar" ]] && unset "$envvar" 2>/dev/null
     done
     echo -e "${GREEN}Shell env vars cleared (Anthropic Official).${NC}" >&2
+
+    # 清除 VS Code environmentVariables
+    _ccp_clear_vscode_env
+    echo -e "${GREEN}VS Code claudeCode.environmentVariables cleared.${NC}" >&2
 
     # 提示是否恢复 cc-switch 兼容状态
     if _ccp_has_global_conflict; then
@@ -517,7 +603,7 @@ ${BOLD}Usage:${NC}
    ccp list         List all profiles
    ccp edit         Edit configuration
    ccp doctor       Diagnose config conflicts
-   ccp fix-vscode   Fix VS Code plugin login (create config.json)
+   ccp sync-vscode  Sync current provider to VS Code settings.json
    ccp uninstall    Remove ccp completely
 
 ${BOLD}Config:${NC} $CONFIG_FILE
@@ -537,12 +623,12 @@ case "${1:-}" in
     list|ls) _ccp_list ;;
     edit)       ${EDITOR:-vim} "$CONFIG_FILE" ;;
     doctor)     _ccp_doctor ;;
-    fix-vscode)
-        _ccp_ensure_vscode_config
-        if _ccp_vscode_config_ok; then
-            echo -e "${GREEN}VS Code config fixed: ${_CLAUDE_VSCODE_CONFIG}${NC}" >&2
+    sync-vscode)
+        _ccp_sync_vscode
+        if [[ $? -eq 0 ]]; then
+            echo -e "${GREEN}VS Code settings synced.${NC}" >&2
         else
-            echo -e "${RED}Failed to create VS Code config${NC}" >&2
+            echo -e "${RED}Failed to sync VS Code settings${NC}" >&2
             return 1
         fi
         ;;

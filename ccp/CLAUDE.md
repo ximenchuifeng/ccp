@@ -41,11 +41,13 @@ ccp 在 `_ccp_switch()` 中自动调用 `_ccp_ensure_onboarding()`，使用 pyth
 
 **注意**：网上流传的 `CLAUDE_CODE_SKIP_AUTH_LOGIN` 和 `disableLoginPrompt` 环境变量/设置项**不存在**，是伪造信息。唯一有效的跳过方式是 `~/.claude.json` 中的 `hasCompletedOnboarding: true`。
 
-## VS Code 插件 Login 跳过
+## VS Code 插件环境变量同步
 
-VS Code Claude 插件在启动时检查 `~/.claude/config.json` 中是否存在 `primaryApiKey` 字段。缺少此文件会导致插件弹出登录窗口。
+VS Code Claude Code 插件通过 `settings.json` 中的 `claudeCode.environmentVariables` 读取环境变量。ccp 在 `_ccp_switch()` 中自动调用 `_ccp_sync_vscode()`，将当前 provider 的 `ANTHROPIC_*` 环境变量写入 VS Code `settings.json`（路径：`~/Library/Application Support/Code/User/settings.json`）。
 
-ccp 在 `_ccp_switch()` 中自动调用 `_ccp_ensure_vscode_config()`，确保 `~/.claude/config.json` 包含 `primaryApiKey`。也可通过 `ccp fix-vscode` 手动触发。`ccp doctor` 第 5 项会显示此状态。
+同时会自动设置 `claudeCode.disableLoginPrompt: true` 和 `claudeCode.hideOnboarding: true`。
+
+也可通过 `ccp sync-vscode` 手动触发同步。`ccp doctor` 第 5 项会检测 VS Code 配置是否与当前 provider 一致。`ccp reset` 会清空 VS Code 的 `claudeCode.environmentVariables`。
 
 ## 已知坑
 

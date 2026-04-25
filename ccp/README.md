@@ -69,9 +69,9 @@ ccp use kimi     # 只切换环境变量，不启动 Claude Code
 ccp status       # 查看当前 provider 状态
 ccp list         # 列出所有已配置的 profile
 ccp edit         # 用编辑器打开配置文件
-ccp reset        # 重置为 Anthropic 官方
-ccp doctor       # 诊断配置冲突（含 VS Code 插件状态）
-ccp fix-vscode   # 修复 VS Code 插件登录（创建 ~/.claude/config.json）
+ccp reset        # 重置为 Anthropic 官方（同时清空 VS Code 配置）
+ccp doctor       # 诊断配置冲突（含 VS Code 插件同步状态）
+ccp sync-vscode  # 手动同步当前 provider 到 VS Code settings.json
 ```
 
 ## 注意事项
