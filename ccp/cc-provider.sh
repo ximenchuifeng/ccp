@@ -141,35 +141,48 @@ except Exception as e:
 # VS Code 插件配置同步（claudeCode.environmentVariables）
 ############################################################
 
-# 将当前 shell 中的 ANTHROPIC_* 环境变量同步到 VS Code settings.json
-# 这样 VS Code Claude Code 插件也会使用同一个 provider
-_ccp_sync_vscode() {
+# 内部：将解析好的 profile 字段写入 VS Code settings.json
+# 参数: 8 个 \x1f 分隔的字段（与 _ccp_parse_profile 输出格式一致）
+_ccp_write_vscode() {
+    local parsed="$1"
     local vscode_dir
     vscode_dir="$(dirname "$_VSCODE_SETTINGS")"
-    [[ ! -d "$vscode_dir" ]] && { echo -e "${YELLOW}VS Code User directory not found — skipping sync${NC}" >&2; return 0; }
+    [[ ! -d "$vscode_dir" ]] && { echo -e "${YELLOW}VS Code User directory not found — skipping${NC}" >&2; return 0; }
 
-    # 构建 python3 脚本：读取/创建 settings.json，注入 claudeCode 配置
-    # 传入当前 shell 中所有非空的 ANTHROPIC_* 环境变量
+    local -a vals
+    IFS="$_SEP" read -rA vals <<< "$parsed"
+
+    # 构建 environmentVariables JSON 数组
+    # vals[2..8] 对应 base_url, api_key, auth_token, model, haiku_model, sonnet_model, opus_model
+    # _CCP_ENVVARS[2..8] 对应 ANTHROPIC_BASE_URL 等
     local env_json="[]"
     if command -v python3 &>/dev/null; then
+        local envvar_str=""
+        local i=2  # 从 base_url 开始（跳过 name）
+        while (( i <= 8 )); do
+            local val="${vals[$i]}"
+            local envvar="${_CCP_ENVVARS[$i]}"
+            if [[ -n "$val" && -n "$envvar" ]]; then
+                envvar_str+="${envvar}=${val}"$'\n'
+            fi
+            ((i++))
+        done
         env_json=$(python3 -c "
-import json, os
-envvars = [
-    'ANTHROPIC_BASE_URL', 'ANTHROPIC_API_KEY', 'ANTHROPIC_AUTH_TOKEN',
-    'ANTHROPIC_MODEL', 'ANTHROPIC_DEFAULT_HAIKU_MODEL',
-    'ANTHROPIC_DEFAULT_SONNET_MODEL', 'ANTHROPIC_DEFAULT_OPUS_MODEL',
-]
+import json, sys
+lines = '''$envvar_str'''.strip().split('\n')
 result = []
-for v in envvars:
-    val = os.environ.get(v, '')
-    if val:
-        result.append({'name': v, 'value': val})
+for line in lines:
+    if '=' not in line:
+        continue
+    k, v = line.split('=', 1)
+    if k and v:
+        result.append({'name': k, 'value': v})
 print(json.dumps(result))
 " 2>/dev/null)
     fi
 
     python3 -c "
-import json, sys, os
+import json, os
 
 path = os.path.expanduser('$_VSCODE_SETTINGS')
 env_json = '''$env_json'''
@@ -179,14 +192,12 @@ try:
 except:
     env_vars = []
 
-# 读取现有 settings
 if os.path.exists(path):
     with open(path, 'r') as f:
         settings = json.load(f)
 else:
     settings = {}
 
-# 设置 claudeCode 配置
 settings['claudeCode.disableLoginPrompt'] = True
 settings['claudeCode.hideOnboarding'] = True
 settings['claudeCode.environmentVariables'] = env_vars
@@ -197,8 +208,71 @@ with open(path, 'w') as f:
 " 2>/dev/null
 
     if [[ $? -ne 0 ]]; then
-        echo -e "${YELLOW}Warning: failed to sync VS Code settings${NC}" >&2
+        echo -e "${YELLOW}Warning: failed to write VS Code settings${NC}" >&2
         return 1
+    fi
+}
+
+# 同步指定 provider 到 VS Code settings.json
+# 用法: _ccp_sync_vscode [profile_name]
+#   有参数: 直接解析该 profile 并写入
+#   无参数: 弹出交互菜单选择 provider
+_ccp_sync_vscode() {
+    local profile_name="${1:-}"
+
+    if [[ -z "$profile_name" ]]; then
+        # 交互选择
+        local profiles=""
+        profiles=$(_ccp_list_profiles)
+        if [[ -z "$profiles" ]]; then
+            echo -e "${RED}No profiles configured. Run 'ccp edit' to add one.${NC}" >&2
+            return 1
+        fi
+
+        echo -e "${BOLD}${CYAN}=== Sync to VS Code ===${NC}" >&2
+        echo -e "${CYAN}   Select a provider to write into VS Code settings.json${NC}" >&2
+        echo "" >&2
+
+        local count=0 p="" parsed="" pname="" purl="" choice=""
+        local -a pnames vals
+        echo -e "   ${BOLD}0)${NC} Clear (empty environmentVariables)" >&2
+
+        while IFS= read -r p; do
+            [[ -z "$p" ]] && continue
+            ((count++))
+            parsed=$(_ccp_parse_profile "$p") || continue
+            IFS="$_SEP" read -rA vals <<< "$parsed"
+            pname="${vals[1]}" purl="${vals[2]}"
+            echo -e "   ${BOLD}$count)${NC} $pname ($p)" >&2
+            pnames+=("$p")
+        done <<< "$profiles"
+
+        echo "" >&2
+        printf "   ${BOLD}Select [0-%s]: ${NC}" "$count" >&2
+        read -r choice </dev/tty
+
+        if [[ ! "$choice" =~ ^[0-9]+$ ]] || [[ "$choice" -gt "$count" ]]; then
+            echo -e "${RED}Invalid choice${NC}" >&2
+            return 1
+        fi
+
+        if [[ "$choice" -eq 0 ]]; then
+            _ccp_clear_vscode_env
+            echo -e "${GREEN}VS Code environmentVariables cleared.${NC}" >&2
+            return 0
+        fi
+
+        profile_name="${pnames[$choice]}"
+    fi
+
+    local parsed=""
+    parsed=$(_ccp_parse_profile "$profile_name") || return 1
+    _ccp_write_vscode "$parsed"
+
+    if [[ $? -eq 0 ]]; then
+        local -a vals
+        IFS="$_SEP" read -rA vals <<< "$parsed"
+        echo -e "${GREEN}VS Code synced: ${BOLD}${vals[1]}${NC} | ${vals[2]} | ${vals[5]:-default}" >&2
     fi
 }
 
@@ -213,45 +287,12 @@ path = os.path.expanduser('$_VSCODE_SETTINGS')
 with open(path, 'r') as f:
     settings = json.load(f)
 
-if 'claudeCode' in settings and 'environmentVariables' in settings.get('claudeCode', {}):
-    # legacy flat format
-    pass
 if 'claudeCode.environmentVariables' in settings:
     settings['claudeCode.environmentVariables'] = []
     with open(path, 'w') as f:
         json.dump(settings, f, indent=4, ensure_ascii=False)
         f.write('\n')
 " 2>/dev/null
-}
-
-# 检测 VS Code settings.json 中的 environmentVariables 是否与当前 shell 一致
-_ccp_vscode_in_sync() {
-    [[ ! -f "$_VSCODE_SETTINGS" ]] && return 1
-
-    # 如果当前 shell 没有第三方 provider，VS Code 也应该为空
-    if [[ -z "${ANTHROPIC_BASE_URL:-}" ]]; then
-        python3 -c "
-import json, os
-with open(os.path.expanduser('$_VSCODE_SETTINGS'), 'r') as f:
-    s = json.load(f)
-envs = s.get('claudeCode.environmentVariables', [])
-sys.exit(0 if len(envs) == 0 else 1)
-import sys
-" 2>/dev/null
-        return $?
-    fi
-
-    # 当前有 provider，检查 VS Code 是否包含 ANTHROPIC_BASE_URL
-    python3 -c "
-import json, os, sys
-with open(os.path.expanduser('$_VSCODE_SETTINGS'), 'r') as f:
-    s = json.load(f)
-envs = s.get('claudeCode.environmentVariables', [])
-has_url = any(e.get('name') == 'ANTHROPIC_BASE_URL' for e in envs)
-has_disable = s.get('claudeCode.disableLoginPrompt', False)
-sys.exit(0 if (has_url and has_disable) else 1)
-" 2>/dev/null
-    return $?
 }
 
 ############################################################
@@ -353,14 +394,27 @@ _ccp_doctor() {
     fi
 
     echo "" >&2
-    echo -e "${BOLD}5. VS Code plugin (${_VSCODE_SETTINGS})${NC}" >&2
+    echo -e "${BOLD}5. VS Code plugin${NC}" >&2
     if [[ ! -f "$_VSCODE_SETTINGS" ]]; then
         echo -e "   ${YELLOW}VS Code settings.json not found — skipping${NC}" >&2
-    elif _ccp_vscode_in_sync; then
-        echo -e "   ${GREEN}OK — claudeCode.environmentVariables in sync${NC}" >&2
     else
-        echo -e "   ${RED}OUT OF SYNC — VS Code claudeCode.environmentVariables does not match current provider${NC}" >&2
-        echo -e "   Fix: ${BOLD}ccp use <name>${NC} will auto-sync, or run ${BOLD}ccp sync-vscode${NC}" >&2
+        local vscode_url=""
+        vscode_url=$(python3 -c "
+import json, os, sys
+with open(os.path.expanduser('$_VSCODE_SETTINGS'), 'r') as f:
+    s = json.load(f)
+envs = s.get('claudeCode.environmentVariables', [])
+for e in envs:
+    if e.get('name') == 'ANTHROPIC_BASE_URL':
+        print(e.get('value', ''))
+        break
+" 2>/dev/null)
+        if [[ -n "$vscode_url" ]]; then
+            echo -e "   ${GREEN}Configured — ANTHROPIC_BASE_URL: $vscode_url${NC}" >&2
+        else
+            echo -e "   ${YELLOW}No provider configured — claudeCode.environmentVariables is empty${NC}" >&2
+            echo -e "   Run ${BOLD}ccp sync-vscode${NC} to select a provider for VS Code." >&2
+        fi
     fi
 }
 
@@ -418,8 +472,8 @@ _ccp_switch() {
     # 确保 onboarding 已完成，跳过 login 提示
     _ccp_ensure_onboarding
 
-    # 同步环境变量到 VS Code settings.json
-    _ccp_sync_vscode
+    # 同步当前 provider 到 VS Code settings.json
+    _ccp_sync_vscode "$profile_name"
 
     echo -e "${GREEN}Switched to: ${BOLD}$name${NC} | $base_url | ${vals[5]:-default}" >&2
 }
@@ -603,7 +657,7 @@ ${BOLD}Usage:${NC}
    ccp list         List all profiles
    ccp edit         Edit configuration
    ccp doctor       Diagnose config conflicts
-   ccp sync-vscode  Sync current provider to VS Code settings.json
+   ccp sync-vscode [name] Sync a provider to VS Code settings.json
    ccp uninstall    Remove ccp completely
 
 ${BOLD}Config:${NC} $CONFIG_FILE
@@ -624,13 +678,7 @@ case "${1:-}" in
     edit)       ${EDITOR:-vim} "$CONFIG_FILE" ;;
     doctor)     _ccp_doctor ;;
     sync-vscode)
-        _ccp_sync_vscode
-        if [[ $? -eq 0 ]]; then
-            echo -e "${GREEN}VS Code settings synced.${NC}" >&2
-        else
-            echo -e "${RED}Failed to sync VS Code settings${NC}" >&2
-            return 1
-        fi
+        _ccp_sync_vscode "${2:-}"
         ;;
     uninstall)  _ccp_uninstall ;;
     claude|"")
