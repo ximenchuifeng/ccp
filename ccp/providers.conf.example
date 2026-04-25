@@ -1,0 +1,35 @@
+# CC-Provider 配置文件
+#
+# 格式:
+# [profile://别名]
+# name         = 显示名称
+# base_url     = API 地址（不带 /v1，Claude Code 会自动拼接）
+# api_key      = 密钥 → ANTHROPIC_API_KEY
+# auth_token   = Token → ANTHROPIC_AUTH_TOKEN（部分 provider 用这个）
+# model        = 默认模型 → ANTHROPIC_MODEL
+# haiku_model  = ANTHROPIC_DEFAULT_HAIKU_MODEL（可选）
+# sonnet_model = ANTHROPIC_DEFAULT_SONNET_MODEL（可选）
+# opus_model   = ANTHROPIC_DEFAULT_OPUS_MODEL（可选）
+#
+# 密钥支持 ${ENV:环境变量名} 格式从环境变量读取
+# api_key 和 auth_token 至少填一个
+
+# ============ 示例 ============
+
+# [profile://openrouter]
+# name         = OpenRouter
+# base_url     = https://openrouter.ai/api
+# api_key      = ${ENV:OPENROUTER_API_KEY}
+# model        = claude-sonnet-4-6
+# haiku_model  = claude-haiku-4-5
+# sonnet_model = claude-sonnet-4-6
+# opus_model   = claude-opus-4-6
+
+# [profile://kimi]
+# name         = Kimi
+# base_url     = https://api.kimi.com/coding/
+# auth_token   = ${ENV:KIMI_API_KEY}
+# model        = kimi-k2.5
+# haiku_model  = kimi-k2.5
+# sonnet_model = kimi-k2.5
+# opus_model   = kimi-k2.5
