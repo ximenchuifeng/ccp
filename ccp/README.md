@@ -55,6 +55,17 @@ name         = GLM-5.1
 base_url     = https://open.bigmodel.cn/api/anthropic
 auth_token   = ${ENV:GLM_API_KEY}
 model        = glm-5.1
+
+[profile://deepseek]
+name            = DeepSeek
+base_url        = https://api.deepseek.com/anthropic
+auth_token      = ${ENV:DEEPSEEK_API_KEY}
+model           = deepseek-v4-pro[1m]
+haiku_model     = deepseek-v4-flash[1m]
+sonnet_model    = deepseek-v4-pro[1m]
+opus_model      = deepseek-v4-pro[1m]
+disable_traffic = 1
+effort_level    = max
 ```
 
 Secrets can be plain text or use `${ENV:VAR_NAME}` to read from environment variables (recommended).
@@ -70,6 +81,8 @@ Secrets can be plain text or use `${ENV:VAR_NAME}` to read from environment vari
 | `haiku_model` | `ANTHROPIC_DEFAULT_HAIKU_MODEL` | Haiku model |
 | `sonnet_model` | `ANTHROPIC_DEFAULT_SONNET_MODEL` | Sonnet model |
 | `opus_model` | `ANTHROPIC_DEFAULT_OPUS_MODEL` | Opus model |
+| `disable_traffic` | `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` | Disable telemetry/updates (set to `1`) |
+| `effort_level` | `CLAUDE_CODE_EFFORT_LEVEL` | Reasoning effort (e.g. `max`) |
 
 ## Usage
 

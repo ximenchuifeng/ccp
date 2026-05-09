@@ -34,6 +34,8 @@ ccp 是一个 zsh 下的 Claude Code LLM Provider 切换工具。通过 shell �
 | 6 | `haiku_model` | `ANTHROPIC_DEFAULT_HAIKU_MODEL` |
 | 7 | `sonnet_model` | `ANTHROPIC_DEFAULT_SONNET_MODEL` |
 | 8 | `opus_model` | `ANTHROPIC_DEFAULT_OPUS_MODEL` |
+| 9 | `disable_traffic` | `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` |
+| 10 | `effort_level` | `CLAUDE_CODE_EFFORT_LEVEL` |
 
 密钥支持 `${ENV:环境变量名}` 语法从 shell 环境读取。
 

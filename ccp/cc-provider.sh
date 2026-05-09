@@ -24,8 +24,8 @@ BLUE='\033[0;34m'; CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 _SEP=$'\x1f'
 
 # 支持的配置字段 → 环境变量映射
-_CCP_FIELDS=(name base_url api_key auth_token model haiku_model sonnet_model opus_model)
-_CCP_ENVVARS=('' ANTHROPIC_BASE_URL ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL)
+_CCP_FIELDS=(name base_url api_key auth_token model haiku_model sonnet_model opus_model disable_traffic effort_level)
+_CCP_ENVVARS=('' ANTHROPIC_BASE_URL ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC CLAUDE_CODE_EFFORT_LEVEL)
 
 # 列出所有 profile 名称
 _ccp_list_profiles() {
@@ -159,7 +159,7 @@ _ccp_write_vscode() {
     if command -v python3 &>/dev/null; then
         local envvar_str=""
         local i=2  # 从 base_url 开始（跳过 name）
-        while (( i <= 8 )); do
+        while (( i <= ${#_CCP_ENVVARS[@]} )); do
             local val="${vals[$i]}"
             local envvar="${_CCP_ENVVARS[$i]}"
             if [[ -n "$val" && -n "$envvar" ]]; then

@@ -55,6 +55,17 @@ name         = OpenRouter
 base_url     = https://openrouter.ai/api
 api_key      = ${ENV:OPENROUTER_API_KEY}
 model        = claude-sonnet-4-6
+
+[profile://deepseek]
+name            = DeepSeek
+base_url        = https://api.deepseek.com/anthropic
+auth_token      = ${ENV:DEEPSEEK_API_KEY}
+model           = deepseek-v4-pro[1m]
+haiku_model     = deepseek-v4-flash[1m]
+sonnet_model    = deepseek-v4-pro[1m]
+opus_model      = deepseek-v4-pro[1m]
+disable_traffic = 1
+effort_level    = max
 ```
 
 密钥可以明文写在配置中，也可以用 `${ENV:环境变量名}` 从环境变量读取（推荐）。
@@ -70,6 +81,8 @@ model        = claude-sonnet-4-6
 | `haiku_model` | `ANTHROPIC_DEFAULT_HAIKU_MODEL` | Haiku 模型 |
 | `sonnet_model` | `ANTHROPIC_DEFAULT_SONNET_MODEL` | Sonnet 模型 |
 | `opus_model` | `ANTHROPIC_DEFAULT_OPUS_MODEL` | Opus 模型 |
+| `disable_traffic` | `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` | 禁用遥测/更新等非必要流量（设为 `1`） |
+| `effort_level` | `CLAUDE_CODE_EFFORT_LEVEL` | 推理深度（如 `max`） |
 
 ## 用法
 

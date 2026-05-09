@@ -10,6 +10,8 @@
 # haiku_model  = ANTHROPIC_DEFAULT_HAIKU_MODEL（可选）
 # sonnet_model = ANTHROPIC_DEFAULT_SONNET_MODEL（可选）
 # opus_model   = ANTHROPIC_DEFAULT_OPUS_MODEL（可选）
+# disable_traffic = 禁用遥测/更新等非必要流量，设为 1 启用（可选）
+# effort_level = 推理深度 → CLAUDE_CODE_EFFORT_LEVEL（可选，如 max）
 #
 # 密钥支持 ${ENV:环境变量名} 格式从环境变量读取
 # api_key 和 auth_token 至少填一个
@@ -33,3 +35,14 @@
 # haiku_model  = kimi-k2.5
 # sonnet_model = kimi-k2.5
 # opus_model   = kimi-k2.5
+
+# [profile://deepseek]
+# name            = DeepSeek
+# base_url        = https://api.deepseek.com/anthropic
+# auth_token      = ${ENV:DEEPSEEK_API_KEY}
+# model           = deepseek-v4-pro[1m]
+# haiku_model     = deepseek-v4-flash[1m]
+# sonnet_model    = deepseek-v4-pro[1m]
+# opus_model      = deepseek-v4-pro[1m]
+# disable_traffic = 1
+# effort_level   = max
