@@ -24,8 +24,8 @@ BLUE='\033[0;34m'; CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 _SEP=$'\x1f'
 
 # 支持的配置字段 → 环境变量映射
-_CCP_FIELDS=(name base_url api_key auth_token model haiku_model sonnet_model opus_model disable_traffic effort_level)
-_CCP_ENVVARS=('' ANTHROPIC_BASE_URL ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC CLAUDE_CODE_EFFORT_LEVEL)
+_CCP_FIELDS=(name base_url api_key auth_token model haiku_model sonnet_model opus_model disable_traffic effort_level subagent_model enable_tool_search auto_compact_window autocompact_pct)
+_CCP_ENVVARS=('' ANTHROPIC_BASE_URL ANTHROPIC_API_KEY ANTHROPIC_AUTH_TOKEN ANTHROPIC_MODEL ANTHROPIC_DEFAULT_HAIKU_MODEL ANTHROPIC_DEFAULT_SONNET_MODEL ANTHROPIC_DEFAULT_OPUS_MODEL CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC CLAUDE_CODE_EFFORT_LEVEL CLAUDE_CODE_SUBAGENT_MODEL ENABLE_TOOL_SEARCH CLAUDE_CODE_AUTO_COMPACT_WINDOW CLAUDE_AUTOCOMPACT_PCT_OVERRIDE)
 
 # 列出所有 profile 名称
 _ccp_list_profiles() {
@@ -153,12 +153,12 @@ _ccp_write_vscode() {
     IFS="$_SEP" read -rA vals <<< "$parsed"
 
     # 构建 environmentVariables JSON 数组
-    # vals[2..8] 对应 base_url, api_key, auth_token, model, haiku_model, sonnet_model, opus_model
-    # _CCP_ENVVARS[2..8] 对应 ANTHROPIC_BASE_URL 等
+    # vals[2..N] 对应所有非 name 字段
+    # _CCP_ENVVARS[2..N] 对应它们导出的环境变量名
     local env_json="[]"
     if command -v python3 &>/dev/null; then
         local envvar_str=""
-        local i=2  # 从 base_url 开始（跳过 name）
+        local i=2  # 从 base_url 开始（跳过 name），遍历所有字段
         while (( i <= ${#_CCP_ENVVARS[@]} )); do
             local val="${vals[$i]}"
             local envvar="${_CCP_ENVVARS[$i]}"
@@ -469,6 +469,9 @@ _ccp_switch() {
         export "$envvar"="$val"
     done
 
+    # 记录当前 profile 名，用于 status / interactive 菜单准确识别
+    export CCP_CURRENT_PROFILE="$profile_name"
+
     # 确保 onboarding 已完成，跳过 login 提示
     _ccp_ensure_onboarding
 
@@ -483,6 +486,7 @@ _ccp_reset() {
     for envvar in "${_CCP_ENVVARS[@]}"; do
         [[ -n "$envvar" ]] && unset "$envvar" 2>/dev/null
     done
+    unset CCP_CURRENT_PROFILE 2>/dev/null
     echo -e "${GREEN}Shell env vars cleared (Anthropic Official).${NC}" >&2
 
     # 清除 VS Code environmentVariables
@@ -509,12 +513,19 @@ _ccp_reset() {
 _ccp_status() {
     echo -e "${BLUE}Provider Status (PID: $$)${NC}" >&2
     if [[ -n "${ANTHROPIC_BASE_URL:-}" ]]; then
+        [[ -n "${CCP_CURRENT_PROFILE:-}" ]] && echo -e "   Profile:  ${GREEN}${CCP_CURRENT_PROFILE}${NC}" >&2
         echo -e "   Mode:     ${GREEN}Third-party${NC}" >&2
         echo -e "   URL:      ${ANTHROPIC_BASE_URL}" >&2
         echo -e "   Model:    ${ANTHROPIC_MODEL:-default}" >&2
         [[ -n "${ANTHROPIC_DEFAULT_HAIKU_MODEL:-}" ]]  && echo -e "   Haiku:    ${ANTHROPIC_DEFAULT_HAIKU_MODEL}" >&2
         [[ -n "${ANTHROPIC_DEFAULT_SONNET_MODEL:-}" ]] && echo -e "   Sonnet:   ${ANTHROPIC_DEFAULT_SONNET_MODEL}" >&2
         [[ -n "${ANTHROPIC_DEFAULT_OPUS_MODEL:-}" ]]   && echo -e "   Opus:     ${ANTHROPIC_DEFAULT_OPUS_MODEL}" >&2
+        [[ -n "${CLAUDE_CODE_SUBAGENT_MODEL:-}" ]]     && echo -e "   Subagent: ${CLAUDE_CODE_SUBAGENT_MODEL}" >&2
+        [[ -n "${CLAUDE_CODE_EFFORT_LEVEL:-}" ]]       && echo -e "   Effort:   ${CLAUDE_CODE_EFFORT_LEVEL}" >&2
+        [[ -n "${CLAUDE_CODE_AUTO_COMPACT_WINDOW:-}" ]] && echo -e "   Compact:  ${CLAUDE_CODE_AUTO_COMPACT_WINDOW}" >&2
+        [[ -n "${CLAUDE_AUTOCOMPACT_PCT_OVERRIDE:-}" ]] && echo -e "   Compact%: ${CLAUDE_AUTOCOMPACT_PCT_OVERRIDE}" >&2
+        [[ -n "${ENABLE_TOOL_SEARCH:-}" ]]             && echo -e "   ToolSearch: ${ENABLE_TOOL_SEARCH}" >&2
+        [[ -n "${CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC:-}" ]] && echo -e "   NoTraffic: ${CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC}" >&2
         local k="${ANTHROPIC_API_KEY:-}"
         [[ -n "$k" ]] && echo -e "   API Key:  ****${k: -4}" >&2
         local t="${ANTHROPIC_AUTH_TOKEN:-}"
@@ -552,9 +563,11 @@ _ccp_interactive() {
     echo -e "${CYAN}   Shell PID: $$ (each terminal is isolated)${NC}" >&2
     echo "" >&2
 
-    local current_url="${ANTHROPIC_BASE_URL:-}"
-    if [[ -n "$current_url" ]]; then
-        echo -e "   Current: ${GREEN}$current_url${NC}" >&2
+    local current_profile="${CCP_CURRENT_PROFILE:-}"
+    if [[ -n "$current_profile" ]]; then
+        echo -e "   Current profile: ${GREEN}$current_profile${NC}" >&2
+    elif [[ -n "${ANTHROPIC_BASE_URL:-}" ]]; then
+        echo -e "   Current URL: ${GREEN}${ANTHROPIC_BASE_URL}${NC}" >&2
     else
         echo -e "   Current: ${YELLOW}Anthropic Official${NC}" >&2
     fi
@@ -571,7 +584,7 @@ _ccp_interactive() {
         IFS="$_SEP" read -rA vals <<< "$parsed"
         pname="${vals[1]}" purl="${vals[2]}"
         marker=""
-        [[ "$purl" == "$current_url" ]] && marker=" ${GREEN}<- current${NC}"
+        [[ "$p" == "$current_profile" ]] && marker=" ${GREEN}<- current${NC}"
         echo -e "   ${BOLD}$count)${NC} $pname ($p)${marker}" >&2
         pnames+=("$p")
     done <<< "$profiles"

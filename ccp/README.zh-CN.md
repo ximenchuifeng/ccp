@@ -10,6 +10,7 @@ zsh 下的 Claude Code LLM Provider 快速切换工具。不同终端可以同�
 - **VS Code 同步** — 将选定的 Provider 配置写入 VS Code `settings.json`，插件免登录使用
 - **自动 Onboarding** — 跳过 Claude Code 的 OAuth 登录提示
 - **配置诊断** — 检测环境冲突、VS Code 配置状态等
+- **准确的 Profile 识别** — `ccp status` 和交互菜单能正确标记当前 profile，即使多个 profile 共用同一个 `base_url`
 
 ## 安装
 
@@ -36,19 +37,32 @@ source ~/.zshrc
 
 ```ini
 [profile://glm]
-name         = GLM-5.1
-base_url     = https://open.bigmodel.cn/api/anthropic
-auth_token   = ${ENV:GLM_API_KEY}
-model        = glm-5.1
-haiku_model  = glm-5.1
-sonnet_model = glm-5.1
-opus_model   = glm-5.1
+name                = GLM-5.1
+base_url            = https://open.bigmodel.cn/api/anthropic
+auth_token          = ${ENV:GLM_API_KEY}
+model               = glm-5.1
+haiku_model         = glm-5.1
+sonnet_model        = glm-5.1
+opus_model          = glm-5.1
+subagent_model      = glm-5.1
+enable_tool_search  = false
+auto_compact_window = 204800
+autocompact_pct     = 85
+disable_traffic     = 1
+effort_level        = max
 
 [profile://kimi]
-name         = Kimi
-base_url     = https://api.kimi.com/coding/
-auth_token   = ${ENV:KIMI_API_KEY}
-model        = kimi-k2.5
+name                = Kimi
+base_url            = https://api.kimi.com/coding/
+auth_token          = ${ENV:KIMI_API_KEY}
+model               = kimi-k2.6
+haiku_model         = kimi-k2.6
+sonnet_model        = kimi-k2.6
+opus_model          = kimi-k2.6
+subagent_model      = kimi-k2.6
+enable_tool_search  = false
+auto_compact_window = 262144
+autocompact_pct     = 85
 
 [profile://openrouter]
 name         = OpenRouter
@@ -57,15 +71,49 @@ api_key      = ${ENV:OPENROUTER_API_KEY}
 model        = claude-sonnet-4-6
 
 [profile://deepseek]
-name            = DeepSeek
-base_url        = https://api.deepseek.com/anthropic
-auth_token      = ${ENV:DEEPSEEK_API_KEY}
-model           = deepseek-v4-pro[1m]
-haiku_model     = deepseek-v4-flash[1m]
-sonnet_model    = deepseek-v4-pro[1m]
-opus_model      = deepseek-v4-pro[1m]
-disable_traffic = 1
-effort_level    = max
+name                = DeepSeek
+base_url            = https://api.deepseek.com/anthropic
+auth_token          = ${ENV:DEEPSEEK_API_KEY}
+model               = deepseek-v4-pro[1m]
+haiku_model         = deepseek-v4-flash
+sonnet_model        = deepseek-v4-pro
+opus_model          = deepseek-v4-pro
+subagent_model      = deepseek-v4-flash
+enable_tool_search  = false
+auto_compact_window = 1048576
+autocompact_pct     = 85
+disable_traffic     = 1
+effort_level        = max
+
+[profile://glm52]
+name                = GLM-5.2
+base_url            = https://open.bigmodel.cn/api/anthropic
+auth_token          = ${ENV:GLM_API_KEY}
+model               = glm-5.2[1m]
+haiku_model         = glm-5.2
+sonnet_model        = glm-5.2
+opus_model          = glm-5.2
+subagent_model      = glm-5.2
+enable_tool_search  = false
+auto_compact_window = 1048576
+autocompact_pct     = 85
+disable_traffic     = 1
+effort_level        = max
+
+[profile://kimi-k2.7-code]
+name                = Kimi K2.7 Code
+base_url            = https://api.kimi.com/coding/
+auth_token          = ${ENV:KIMI_API_KEY}
+model               = kimi-k2.7-code
+haiku_model         = kimi-k2.7-code
+sonnet_model        = kimi-k2.7-code
+opus_model          = kimi-k2.7-code
+subagent_model      = kimi-k2.7-code
+enable_tool_search  = false
+auto_compact_window = 262144
+autocompact_pct     = 85
+disable_traffic     = 1
+effort_level        = max
 ```
 
 密钥可以明文写在配置中，也可以用 `${ENV:环境变量名}` 从环境变量读取（推荐）。
@@ -83,6 +131,10 @@ effort_level    = max
 | `opus_model` | `ANTHROPIC_DEFAULT_OPUS_MODEL` | Opus 模型 |
 | `disable_traffic` | `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` | 禁用遥测/更新等非必要流量（设为 `1`） |
 | `effort_level` | `CLAUDE_CODE_EFFORT_LEVEL` | 推理深度（如 `max`） |
+| `subagent_model` | `CLAUDE_CODE_SUBAGENT_MODEL` | 子 Agent 模型（通常与 `model` 相同） |
+| `enable_tool_search` | `ENABLE_TOOL_SEARCH` | 工具搜索开关（如 `false`） |
+| `auto_compact_window` | `CLAUDE_CODE_AUTO_COMPACT_WINDOW` | 自动压缩上下文窗口大小（如 `262144`） |
+| `autocompact_pct` | `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` | 自动压缩触发百分比（如 `85`） |
 
 ## 用法
 
@@ -108,6 +160,31 @@ ccp uninstall      # 卸载 ccp
 - `claudeCode.hideOnboarding: true`
 
 `ccp use <name>` 切换终端 Provider 时也会自动同步到 VS Code。
+
+## 重新安装 / 卸载
+
+完全卸载 ccp：
+
+```sh
+ccp uninstall
+```
+
+这会删除 `~/.local/share/cc-provider`、从 `~/.zshrc` 移除 ccp 行，并清空当前 shell 的 provider 环境变量。
+
+重新安装（例如更新到新版本）：
+
+```sh
+# 1. 先卸载旧版本
+ccp uninstall
+
+# 2. 重新运行安装脚本
+bash install.sh
+
+# 3. 重新加载 shell
+source ~/.zshrc
+```
+
+> 卸载会删除 `providers.conf`，如需保留 profile 配置，请提前备份。
 
 ## 注意事项
 

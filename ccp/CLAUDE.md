@@ -36,6 +36,10 @@ ccp 是一个 zsh 下的 Claude Code LLM Provider 切换工具。通过 shell �
 | 8 | `opus_model` | `ANTHROPIC_DEFAULT_OPUS_MODEL` |
 | 9 | `disable_traffic` | `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` |
 | 10 | `effort_level` | `CLAUDE_CODE_EFFORT_LEVEL` |
+| 11 | `subagent_model` | `CLAUDE_CODE_SUBAGENT_MODEL` |
+| 12 | `enable_tool_search` | `ENABLE_TOOL_SEARCH` |
+| 13 | `auto_compact_window` | `CLAUDE_CODE_AUTO_COMPACT_WINDOW` |
+| 14 | `autocompact_pct` | `CLAUDE_AUTOCOMPACT_PCT_OVERRIDE` |
 
 密钥支持 `${ENV:环境变量名}` 语法从 shell 环境读取。
 
@@ -44,17 +48,19 @@ ccp 是一个 zsh 下的 Claude Code LLM Provider 切换工具。通过 shell �
 ### 1. Provider 切换 (`_ccp_switch`)
 1. 检测 `~/.claude/settings.json` 中 ANTHROPIC_* env 冲突，提示清除
 2. `_ccp_parse_profile` 解析配置，export 环境变量
-3. `_ccp_ensure_onboarding` 自动设置 `hasCompletedOnboarding: true`
-4. `_ccp_sync_vscode` 自动同步到 VS Code settings.json
+3. 同时 export `CCP_CURRENT_PROFILE` 记录当前 profile 名，供 `status` / 交互菜单准确识别
+4. `_ccp_ensure_onboarding` 自动设置 `hasCompletedOnboarding: true`
+5. `_ccp_sync_vscode` 自动同步到 VS Code settings.json
 
 ### 2. Onboarding 跳过 (`_ccp_ensure_onboarding`)
 修改 `~/.claude.json` 中的 `hasCompletedOnboarding` 为 `true`，跳过 OAuth login。优先用 python3（安全），fallback 用 sed。
 
 ### 3. VS Code 插件同步 (`_ccp_sync_vscode` / `_ccp_write_vscode`)
-- 将指定 provider 的配置写入 VS Code `settings.json` 的 `claudeCode.environmentVariables` 数组
+- 将指定 provider 的配置（`_CCP_ENVVARS` 中所有非空字段）写入 VS Code `settings.json` 的 `claudeCode.environmentVariables` 数组
 - 同时设置 `claudeCode.disableLoginPrompt: true` 和 `claudeCode.hideOnboarding: true`
 - `ccp sync-vscode` 无参数时弹出交互选择菜单，有参数时直接指定 provider
 - `ccp reset` 时调用 `_ccp_clear_vscode_env` 清空
+- 新增字段只需同步扩展 `_CCP_FIELDS` / `_CCP_ENVVARS` 两个数组，VS Code 同步循环会自动遍历全部字段
 
 ### 4. 全局冲突检测 (`_ccp_has_global_conflict` / `_ccp_clean_global_env`)
 检测并清除 `~/.claude/settings.json` 中的 `env` 块（旧版 cc-switch 等工具写入的配置）。
@@ -77,3 +83,4 @@ ccp 是一个 zsh 下的 Claude Code LLM Provider 切换工具。通过 shell �
 3. zsh `[[ =~ ]]` 对 `[` 的处理有兼容性问题，改用 glob `[[ = \[profile://* ]]`
 4. `~/.claude.json`（应用状态）vs `~/.claude/settings.json`（用户设置）— 两者不能混用
 5. 网传的 `CLAUDE_CODE_SKIP_AUTH_LOGIN` 和 `disableLoginPrompt` 环境变量**不存在**，是伪造信息
+6. 多个 profile 可能共用同一个 `base_url`（如 `kimi` 和 `kimi-k2.7-code`），不能仅靠 `ANTHROPIC_BASE_URL` 判断当前 profile，必须使用 `CCP_CURRENT_PROFILE`

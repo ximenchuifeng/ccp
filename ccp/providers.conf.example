@@ -10,6 +10,10 @@
 # haiku_model  = ANTHROPIC_DEFAULT_HAIKU_MODEL（可选）
 # sonnet_model = ANTHROPIC_DEFAULT_SONNET_MODEL（可选）
 # opus_model   = ANTHROPIC_DEFAULT_OPUS_MODEL（可选）
+# subagent_model = 子 Agent 模型 → CLAUDE_CODE_SUBAGENT_MODEL（可选）
+# enable_tool_search = 工具搜索开关 → ENABLE_TOOL_SEARCH（可选，如 false）
+# auto_compact_window = 自动压缩窗口大小 → CLAUDE_CODE_AUTO_COMPACT_WINDOW（可选，如 262144）
+# autocompact_pct = 自动压缩触发百分比 → CLAUDE_AUTOCOMPACT_PCT_OVERRIDE（可选，如 85）
 # disable_traffic = 禁用遥测/更新等非必要流量，设为 1 启用（可选）
 # effort_level = 推理深度 → CLAUDE_CODE_EFFORT_LEVEL（可选，如 max）
 #
@@ -31,18 +35,71 @@
 # name         = Kimi
 # base_url     = https://api.kimi.com/coding/
 # auth_token   = ${ENV:KIMI_API_KEY}
-# model        = kimi-k2.5
-# haiku_model  = kimi-k2.5
-# sonnet_model = kimi-k2.5
-# opus_model   = kimi-k2.5
+# model        = kimi-k2.6
+# haiku_model  = kimi-k2.6
+# sonnet_model = kimi-k2.6
+# opus_model   = kimi-k2.6
+# subagent_model = kimi-k2.6
+# enable_tool_search = false
+# auto_compact_window = 262144
+# autocompact_pct = 85
+
+# [profile://glm]
+# name            = GLM-5.1
+# base_url        = https://open.bigmodel.cn/api/anthropic
+# auth_token      = ${ENV:GLM_API_KEY}
+# model           = glm-5.1
+# haiku_model     = glm-5.1
+# sonnet_model    = glm-5.1
+# opus_model      = glm-5.1
+# subagent_model  = glm-5.1
+# enable_tool_search = false
+# auto_compact_window = 204800
+# autocompact_pct = 85
+# disable_traffic = 1
+# effort_level    = max
 
 # [profile://deepseek]
 # name            = DeepSeek
 # base_url        = https://api.deepseek.com/anthropic
 # auth_token      = ${ENV:DEEPSEEK_API_KEY}
 # model           = deepseek-v4-pro[1m]
-# haiku_model     = deepseek-v4-flash[1m]
-# sonnet_model    = deepseek-v4-pro[1m]
-# opus_model      = deepseek-v4-pro[1m]
+# haiku_model     = deepseek-v4-flash
+# sonnet_model    = deepseek-v4-pro
+# opus_model      = deepseek-v4-pro
+# subagent_model  = deepseek-v4-flash
+# enable_tool_search = false
+# auto_compact_window = 1048576
+# autocompact_pct = 85
 # disable_traffic = 1
-# effort_level   = max
+# effort_level    = max
+
+# [profile://glm52]
+# name            = GLM-5.2
+# base_url        = https://open.bigmodel.cn/api/anthropic
+# auth_token      = ${ENV:GLM_API_KEY}
+# model           = glm-5.2[1m]
+# haiku_model     = glm-5.2
+# sonnet_model    = glm-5.2
+# opus_model      = glm-5.2
+# subagent_model  = glm-5.2
+# enable_tool_search = false
+# auto_compact_window = 1048576
+# autocompact_pct = 85
+# disable_traffic = 1
+# effort_level    = max
+
+# [profile://kimi-k2.7-code]
+# name            = Kimi K2.7 Code
+# base_url        = https://api.kimi.com/coding/
+# auth_token      = ${ENV:KIMI_API_KEY}
+# model           = kimi-k2.7-code
+# haiku_model     = kimi-k2.7-code
+# sonnet_model    = kimi-k2.7-code
+# opus_model      = kimi-k2.7-code
+# subagent_model  = kimi-k2.7-code
+# enable_tool_search = false
+# auto_compact_window = 262144
+# autocompact_pct = 85
+# disable_traffic = 1
+# effort_level    = max
